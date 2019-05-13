@@ -1,0 +1,23 @@
+year;number;error
+2015;105;Error: Request failed with status code 500
+2015;106;Error: Request failed with status code 500
+2015;107;Error: Request failed with status code 500
+2015;108;Error: Request failed with status code 500
+2015;109;Error: Request failed with status code 500
+2015;110;Error: Request failed with status code 500
+2015;111;Error: Request failed with status code 500
+2015;113;Error: Request failed with status code 500
+2015;195;Error: Request failed with status code 404
+2015;196;Error: Request failed with status code 404
+2015;197;Error: Request failed with status code 404
+2015;258;Error: Request failed with status code 404
+2015;259;Error: Request failed with status code 404
+2015;422;Error: Request failed with status code 404
+2015;731;Error: Request failed with status code 404
+2015;825;Error: Request failed with status code 404
+2015;1073;Error: Request failed with status code 404
+2015;1330;Error: Request failed with status code 404
+2015;1423;Error: Request failed with status code 404
+2015;1452;Error: Request failed with status code 404
+2015;1522;Error: Request failed with status code 404
+2015;1523;Error: Request failed with status code 404
