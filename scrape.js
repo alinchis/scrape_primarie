@@ -4,6 +4,8 @@ let fs = require('fs'); //for saving to file
 const targetServer = 'https://primariaclujnapoca.ro/autorizari-constructii/autorizatii-de-construire';
 const htmlOutputPath = './scraped';
 const csvOutputPath = './processed';
+const readline = require('readline');
+const stream = require('stream');
 
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -58,7 +60,7 @@ function parseData(year, index, data) {
 	const filename = `${htmlOutputPath}/${year}_${index}.html`;
 	console.log(filename);
 	// load html data
-	const $ = cheerio.load(data.replace(/\s{2,}/g, ' ').replace(/ ,/g, ','));
+	const $ = cheerio.load(data.replace('\n', ' '));
 	// important data for save
 	const newArray = [];
 	newArray.push(index); // numar autorizatie
@@ -70,7 +72,7 @@ function parseData(year, index, data) {
 	newArray.push($('div.field-nrfisacarte').text()); // carte funciara
 	newArray.push($('div.field-nrtopo').text()); // numar topo
 	newArray.push($('div.field-valoarelucrari').text().replace('Investiție de bază:', '').trim()); // valoare lucrari
-	newArray.push($('div.col-md-8').text().replace('\n', '').trim()); // proiectant
+	newArray.push($('div.col-md-8').text().trim()); // detalii proiect
 	newArray.push($('div.field-nume').text().trim()); // titular
 	newArray.push($('div.field-nrcerere').text().replace('CERERE NR.', '')); // numar cerere autorizare
 	newArray.push($('div.field-datacerere').text().replace('DIN DATA:', '').replace(/\./g, '-')); // data cerere autorizare
@@ -182,55 +184,89 @@ async function downloadData(first_auth, last_auth, max_count, batch_size) {
 /////////////////////////////////////////////////////////////////////////////////////
 // download data from server
 async function downloadYear(year, first_auth, last_auth, max_count) {
-	let urls_to_fetch = [];
-	// create log file
-	const logStream = fs.createWriteStream(`${csvOutputPath}/${year}_download_log.csv`);
-	logStream.write('year;number;error\n');
-	// create output file
-	const outStream = fs.createWriteStream(`${csvOutputPath}/${year}_lista_AC.csv`);
-	const outStreamHeader = [
-		'Aut. Nr.',
-		'An',
-		'Data',
-		'Titlu',
-		'Adresa',
-		'Categorie importanta',
-		'Carte funciara',
-		'Nr. TOPO',
-		'Detalii',
-		'Titular',
-		'Cerere Nr.',
-		'Cerere Data',
-		'Durata executie',
-		'UM',
-		'Valabilitate',
-		'UM',
-		'Primar',
-		'Secretar',
-		'Arhitect Sef',
-		'Sef Serviciu',
-		'Intocmit de',
-		'Data creare',
-		'Taxa autorizare',
-	];
-	outStream.write(`${outStreamHeader.join(';')}\n`);
+	let lastIndex = 1;
+	const outPath = `${csvOutputPath}/${year}_lista_AC.csv`;
+	const logPath = `${csvOutputPath}/${year}_download_log.csv`;
+	const errorPath = `${csvOutputPath}/${year}_error_log.csv`;
+	// prepare streams
+	let logStream = '';
+	let errorStream = '';
+	let outStream = '';
+
+	// check if files already exist, append files
+	if (fs.existsSync(outPath) && fs.existsSync(logPath) && fs.existsSync(errorPath)) {
+		const loadFile = fs.readFileSync(logPath, 'utf8');
+		// console.log(loadFile);
+		const lastArr = loadFile.split('\n');
+		console.log(lastArr);
+		const lastItem = lastArr[lastArr.length-2].split(';');
+		console.log(lastItem);
+		lastIndex = lastItem[1];
+
+		// create downloads log file
+		logStream = fs.createWriteStream(logPath, {'flags': 'a'});
+		// create error log file
+		errorStream = fs.createWriteStream(errorPath, {'flags': 'a'});
+		// create output file
+		outStream = fs.createWriteStream(outPath, {'flags': 'a'});
+
+	// if new download
+	} else {
+		// create downloads log file
+		logStream = fs.createWriteStream(logPath);
+		logStream.write('year;number\n');
+		// create error log file
+		errorStream = fs.createWriteStream(errorPath);
+		errorStream.write('year;number;error\n');
+		// create output file
+		outStream = fs.createWriteStream(outPath);
+		const outStreamHeader = [
+			'Aut. Nr.',
+			'An',
+			'Data',
+			'Titlu',
+			'Adresa',
+			'Categorie importanta',
+			'Carte funciara',
+			'Nr. TOPO',
+			'Detalii',
+			'Titular',
+			'Cerere Nr.',
+			'Cerere Data',
+			'Durata executie',
+			'UM',
+			'Valabilitate',
+			'UM',
+			'Primar',
+			'Secretar',
+			'Arhitect Sef',
+			'Sef Serviciu',
+			'Intocmit de',
+			'Data creare',
+			'Taxa autorizare',
+		];
+		outStream.write(`${outStreamHeader.join(';')}\n`);
+	}
+	
 
 	// for each index in given year, download data
-	for (let index = year == 2013 ? 1045 : 1; index <= max_count[year]; index++){
+	console.log(`@downloadYear: lastIndex = ${lastIndex}`);
+	for (let index = year == 2013 ? 1045 : lastIndex; index <= max_count[year]; index++){
 		// fetch data
 		try {
 			const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
 			// test for success
 			if(resp.status === 200){
 				saveToFile(year, index, resp.data, outStream);
+				logStream.write(`${year};${index}\n`);
 				// console.log(`saved to ${filename}`);
 			} else {
-				logStream.write(`${year};${index};${resp.status}\n`);
+				errorStream.write(`${year};${index};${resp.status}\n`);
 				console.error(`Error getting data for ${year}/${index}`);
 			}
 		} catch(e) {
 				// add item to log
-				logStream.write(`${year};${index};${e}\n`);
+				errorStream.write(`${year};${index};${e}\n`);
 				console.error(`Error ${e} when getting index for year ${year} and index ${index}`)
 		}
 	}
