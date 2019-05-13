@@ -60,7 +60,7 @@ function parseData(year, index, data) {
 	const filename = `${htmlOutputPath}/${year}_${index}.html`;
 	console.log(filename);
 	// load html data
-	const $ = cheerio.load(data.replace('\n', ' '));
+	const $ = cheerio.load(data);
 	// important data for save
 	const newArray = [];
 	newArray.push(index); // numar autorizatie
@@ -72,7 +72,7 @@ function parseData(year, index, data) {
 	newArray.push($('div.field-nrfisacarte').text()); // carte funciara
 	newArray.push($('div.field-nrtopo').text()); // numar topo
 	newArray.push($('div.field-valoarelucrari').text().replace('Investiție de bază:', '').trim()); // valoare lucrari
-	newArray.push($('div.col-md-8').text().trim()); // detalii proiect
+	newArray.push($('div.col-md-8').text().replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim()); // detalii proiect
 	newArray.push($('div.field-nume').text().trim()); // titular
 	newArray.push($('div.field-nrcerere').text().replace('CERERE NR.', '')); // numar cerere autorizare
 	newArray.push($('div.field-datacerere').text().replace('DIN DATA:', '').replace(/\./g, '-')); // data cerere autorizare
@@ -201,7 +201,7 @@ async function downloadYear(year, first_auth, last_auth, max_count) {
 		console.log(lastArr);
 		const lastItem = lastArr[lastArr.length-2].split(';');
 		console.log(lastItem);
-		lastIndex = lastItem[1];
+		lastIndex = parseInt(lastItem[1]) + 1;
 
 		// create downloads log file
 		logStream = fs.createWriteStream(logPath, {'flags': 'a'});
@@ -246,12 +246,15 @@ async function downloadYear(year, first_auth, last_auth, max_count) {
 			'Taxa autorizare',
 		];
 		outStream.write(`${outStreamHeader.join(';')}\n`);
+
+		// in case of year 2013, the first available authorisation starts at 1045
+		if (year === 2013) lastIndex = 1045;
 	}
 	
 
 	// for each index in given year, download data
 	console.log(`@downloadYear: lastIndex = ${lastIndex}`);
-	for (let index = year == 2013 ? 1045 : lastIndex; index <= max_count[year]; index++){
+	for (let index = lastIndex; index <= max_count[year]; index++){
 		// fetch data
 		try {
 			const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
