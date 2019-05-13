@@ -26,53 +26,91 @@ function parseFile(year, index) {
 	const authArr = parseHtml(htmlText);
 }
 
+
+/////////////////////////////////////////////////////////////////////////////////////
+// convert date to numerical
+function convertDate(text) {
+	let newText = '';
+
+	// replace text with numerical values
+	newText = text.replace(' ianuarie ', '-01-');
+	newText = newText.replace(' februarie ', '-02-');
+	newText = newText.replace(' martie ', '-03-');
+	newText = newText.replace(' aprilie ', '-04-');
+	newText = newText.replace(' mai ', '-05-');
+	newText = newText.replace(' iunie ', '-06-');
+	newText = newText.replace(' iulie ', '-07-');
+	newText = newText.replace(' august ', '-08-');
+	newText = newText.replace(' septembrie ', '-09-');
+	newText = newText.replace(' octombrie ', '-10-');
+	newText = newText.replace(' noiembrie ', '-11-');
+	newText = newText.replace(' decembrie ', '-12-');
+
+	// return numerical text
+	return newText;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////////////
 // parse all html files
-function parseData() {
-	// const fileName = `year_index.html`;
-	// const htmlText = fs.readFileSync(`${htmlOutputPath}/${fileName}`);
-	// // parse text
-	// const authArr = parseHtml(htmlText);
+function parseData(year, index, data) {
+	console.log('@parseData\n');
+	const filename = `${htmlOutputPath}/${year}_${index}.html`;
+	console.log(filename);
+	// load html data
+	const $ = cheerio.load(data.replace(/\s{2,}/g, ' ').replace(/ ,/g, ','));
+	// important data for save
+	const newArray = [];
+	newArray.push(index); // numar autorizatie
+	newArray.push(year); // an
+	newArray.push(convertDate($('div.fusion-page-title-captions h3').text())); // data afisarii numeric
+	newArray.push($('div.field-lucrari').text().trim()); // titlu lucrare
+	newArray.push($('div.field-adresa_lucrare').text()); // adresa lucrare
+	newArray.push($('div.field-categorie_importanta').text().replace('Categorie importanță:', '')); // categoria de importanta
+	newArray.push($('div.field-nrfisacarte').text()); // carte funciara
+	newArray.push($('div.field-nrtopo').text()); // numar topo
+	newArray.push($('div.field-valoarelucrari').text().replace('Investiție de bază:', '').trim()); // valoare lucrari
+	newArray.push($('div.col-md-8').text().replace('\n', '').trim()); // proiectant
+	newArray.push($('div.field-nume').text().trim()); // titular
+	newArray.push($('div.field-nrcerere').text().replace('CERERE NR.', '')); // numar cerere autorizare
+	newArray.push($('div.field-datacerere').text().replace('DIN DATA:', '').replace(/\./g, '-')); // data cerere autorizare
+	newArray.push($('div.field-durataexecut').text()); // durata de executie a lucrarilor: Valoare
+	newArray.push($('div.field-luni_zile_exec').text()); // durata de executie a lucrarilor: UM
+	newArray.push($('div.field-valabilitate').text()); // termen de valabilitate: Valoare
+	newArray.push($('div.field-luni_zile_valab').text()); // termen de valabilitate: UM
+	newArray.push($('div.field-primar').text().replace('PRIMAR:', '')); // primar
+	newArray.push($('div.field-secretar').text().replace('SECRETAR:', '')); // secretar
+	newArray.push($('div.field-arhitectsef').text().replace('ARHITECT ȘEF:', '')); // arhitect sef
+	newArray.push($('div.field-sefserviciuaut').text().replace('ȘEF SERVICIU:', '')); // sef serviciu autorizari
+	newArray.push($('div.field-inspectorurbanism').text().replace('ÎNTOCMIT DE:', '')); // intocmit de
+	newArray.push($('div.field-data_creare').text().replace('Data creare:', '').replace(/\./g, '-')); // data creare
+	newArray.push($('div.field-taxaautorizare').text().replace('Taxa de autorizare:', '')); // taxa autorizare
+	
+	// console.log(dateIssued);
+	// return new array
+	console.log(`@parseData:: ${year}/${index} DONE\n`);
+	console.log(newArray);
+	return newArray;
+
 }
+
 
 /////////////////////////////////////////////////////////////////////////////////////
 // save page to file
-function saveToFile(year, index, data) {
-	const filename = `${htmlOutputPath}/${year}_${index}.html`;
-	// console.log(filename);
-	fs.writeFileSync(filename, data);
-	console.log(`saved to ${filename}`);
-}
+function saveToFile(year, index, data, outStream) {
+	// console.log(data.data);
+	// parse data
+	const dataArr = parseData(year, index, data);
 
-/////////////////////////////////////////////////////////////////////////////////////
-// save batch array to files
-const save_urls = async (promises, logFile) => {
-	console.log('@save_url >>> WRITE BATCH');
-	
-	// await for batch array
-	responses = await Promise.all(promises.map( p => p.promise.catch(e => {
-		// add item to log
-		logFile.write(`${p.year};${p.index};${e}\n`);
-		console.error(`Error ${e} when getting index for year ${p.year} and index ${p.index}`)
-	}) ));
-	// write array to files
-	for (let i = 0; i < promises.length; i++){
-		const resp = responses[i];
-		const p = promises[i];
-		const filename = `${htmlOutputPath}/${p.year}_${p.index}.html`;
-		if(resp.status === 200){
-			saveToFile(p.year, p.index, resp.data);
-			// console.log(`saved to ${filename}`);
-		} else {
-			console.error(`Error getting data for ${filename}`);
-		};
-	}
-};
+	// write to file
+	// fs.writeFileSync(filename, dataArr.join(';'));
+	outStream.write(`${dataArr.join(';')}\n`);
+	console.log(`@saveToFile:: AC ${year}/${index} saved to file`);
+}
 
 
 /////////////////////////////////////////////////////////////////////////////////////
 // download file from server
-
 async function downloadFile(year, index) {
 	const data = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
 	saveToFile(year, index, data);
@@ -80,11 +118,39 @@ async function downloadFile(year, index) {
 
 /////////////////////////////////////////////////////////////////////////////////////
 // download data from server
-
-async function downloadData() {
+async function downloadData(first_auth, last_auth, max_count, batch_size) {
+	let urls_to_fetch = [];
 	// create log file
 	const logStream = fs.createWriteStream(`download_log.csv`);
 	logStream.write('year;number;error\n');
+	// create output file
+	const outStream = fs.createWriteStream(`lista_AC.csv`);
+	const outStreamHeader = [
+		'Aut. Nr.',
+		'An',
+		'Data',
+		'Titlu',
+		'Adresa',
+		'Categorie importanta',
+		'Carte funciara',
+		'Nr. TOPO',
+		'Detalii',
+		'Titular',
+		'Cerere Nr.',
+		'Cerere Data',
+		'Durata executie',
+		'UM',
+		'Valabilitate',
+		'UM',
+		'Primar',
+		'Secretar',
+		'Arhitect Sef',
+		'Sef Serviciu',
+		'Intocmit de',
+		'Data creare',
+		'Taxa autorizare',
+	];
+	outStream.write(`${outStreamHeader.join(';')}\n`);
 
 	// for each year value in range
 	for (let year = 2013; year <= 2019; year++){
@@ -92,22 +158,80 @@ async function downloadData() {
 		// for each authorisation number, max limit set to max_count /year
 		// available list starts in 2013 with index no 1045
 		for (let index = year === 2013 ? 1045 : 1; index <= max_count[year]; index++){
-			// if batch is full write array to files
-			if (urls_to_fetch.length === batch_size || index > max_count[year]){
-				await save_urls(urls_to_fetch, logStream).catch(e => {
-					console.error(`Error for promise.all ${e}`);
-					// console.trace('error');
-				});
-				urls_to_fetch = [];
-			// if batch not full
+			// fetch data
+			try {
+				const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
+				// test for success
+				if(resp.status === 200){
+					saveToFile(year, index, resp.data, outStream);
+					// console.log(`saved to ${filename}`);
+				} else {
+					logStream.write(`${year};${index};${resp.status}\n`);
+					console.error(`Error getting data for ${year}/${index}`);
+				};
+			} catch(e) {
+					// add item to log
+					logStream.write(`${year};${index};${e}\n`);
+					console.error(`Error ${e} when getting index for year ${year} and index ${index}`)
+			};
+		}
+	}
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+// download data from server
+async function downloadYear(year, first_auth, last_auth, max_count) {
+	let urls_to_fetch = [];
+	// create log file
+	const logStream = fs.createWriteStream(`${csvOutputPath}/${year}_download_log.csv`);
+	logStream.write('year;number;error\n');
+	// create output file
+	const outStream = fs.createWriteStream(`${csvOutputPath}/${year}_lista_AC.csv`);
+	const outStreamHeader = [
+		'Aut. Nr.',
+		'An',
+		'Data',
+		'Titlu',
+		'Adresa',
+		'Categorie importanta',
+		'Carte funciara',
+		'Nr. TOPO',
+		'Detalii',
+		'Titular',
+		'Cerere Nr.',
+		'Cerere Data',
+		'Durata executie',
+		'UM',
+		'Valabilitate',
+		'UM',
+		'Primar',
+		'Secretar',
+		'Arhitect Sef',
+		'Sef Serviciu',
+		'Intocmit de',
+		'Data creare',
+		'Taxa autorizare',
+	];
+	outStream.write(`${outStreamHeader.join(';')}\n`);
+
+	// for each index in given year, download data
+	for (let index = year == 2013 ? 1045 : 1; index <= max_count[year]; index++){
+		// fetch data
+		try {
+			const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
+			// test for success
+			if(resp.status === 200){
+				saveToFile(year, index, resp.data, outStream);
+				// console.log(`saved to ${filename}`);
 			} else {
-				urls_to_fetch.push({
-					promise: axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`),
-					index: index,
-					year: year
-				});
-				console.log(`@url_to_fetch >>> AUT ${index}/${year}: REQUEST SENT`);
+				logStream.write(`${year};${index};${resp.status}\n`);
+				console.error(`Error getting data for ${year}/${index}`);
 			}
+		} catch(e) {
+				// add item to log
+				logStream.write(`${year};${index};${e}\n`);
+				console.error(`Error ${e} when getting index for year ${year} and index ${index}`)
 		}
 	}
 }
@@ -115,13 +239,11 @@ async function downloadData() {
 
 /////////////////////////////////////////////////////////////////////////////////////
 // MAIN
-
 function main() {
 	console.log(process.argv);
 
 	// default local data
-	const batch_size = 10;
-	let urls_to_fetch = [];
+	const batch_size = 1;
 	// manually add number of authorisations for each year available
 	// the availability starts in 2013 with authorisation no 1025
 	const first_auth = {2013: 1025};
@@ -160,19 +282,26 @@ function main() {
 		const year = process.argv[3] || 0;
 		const index = process.argv[4] || 0;
 
-		// if there are no more arguments, download all files from server
-		if (year === index === 0) {
-			// extract counties from the localities level tables
-			downloadData();
-		
-		// if both year and index !== 0, extract the corresponding file
-		} else if (year !== 0 && index !== 0) {
-			downloadFile(year, index);
+			// if there are no more arguments, download all files from server
+			if (year === 0 && index === 0) {
+				// extract counties from the localities level tables
+				console.log('downloadData branch\n')
+				downloadData(first_auth, last_auth, max_count, batch_size);
+			
+			// if both year and index !== 0, extract the corresponding file
+			} else if (year !== 0 && index === 0) {
+				console.log('downloadYear branch\n')
+				downloadYear(year, first_auth, last_auth, max_count);
+			
+			// if both year and index !== 0, extract the corresponding file
+			} else if (year !== 0 && index !== 0) {
+				console.log('downloadFile branch\n')
+				downloadFile(year, index);
 
-		// else print help
-		} else {
-			console.log(helpText);
-		}
+			// else print help
+			} else {
+				console.log(helpText);
+			}
         
 	
 	// 3. else ift argument is 'p' >> parse all files
@@ -205,5 +334,4 @@ function main() {
 
 // ////////////////////////////////////////////////////////////////////////////
 // // RUN MAIN
-
 main();
