@@ -1,4 +1,7 @@
+year;number;error
 2018;79;Error: Request failed with status code 404
+2018;92;Error: Request failed with status code 500
+2018;93;Error: Request failed with status code 500
 2018;1711;Error: Request failed with status code 404
 2018;1803;Error: Request failed with status code 404
 2018;1866;Error: Request failed with status code 404

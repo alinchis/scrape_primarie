@@ -56,9 +56,8 @@ function convertDate(text) {
 /////////////////////////////////////////////////////////////////////////////////////
 // parse all html files
 function parseData(year, index, data) {
-	console.log('@parseData\n');
-	const filename = `${htmlOutputPath}/${year}_${index}.html`;
-	console.log(filename);
+	console.log(`@parseData:: ${year}/${index} STARTING\n`);
+
 	// load html data
 	const $ = cheerio.load(data);
 	// important data for save
@@ -91,7 +90,7 @@ function parseData(year, index, data) {
 	// console.log(dateIssued);
 	// return new array
 	console.log(`@parseData:: ${year}/${index} DONE\n`);
-	console.log(newArray);
+	// console.log(newArray);
 	return newArray;
 
 }
@@ -273,20 +272,174 @@ async function downloadYear(year, first_auth, last_auth, max_count) {
 				console.error(`Error ${e} when getting index for year ${year} and index ${index}`)
 		}
 	}
+
+	// close write Streams
+	outStream.close();
+	logStream.close();
+	errorStream.close();
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+// check for download errors and request data again
+async function reviewDownloads(year) {
+	console.log(`@reviewDownloads:: year = ${year}`);
+
+	// init file paths
+	const dataPath = `${csvOutputPath}/${year}_lista_AC.csv`;
+	const logPath = `${csvOutputPath}/${year}_download_log.csv`;
+	const errorPath = `${csvOutputPath}/${year}_error_log.csv`;
+
+	const tempDataPath = `${csvOutputPath}/${year}_lista_AC-temp.csv`;
+	const tempLogPath = `${csvOutputPath}/${year}_download_log-temp.csv`;
+	const tempErrorPath = `${csvOutputPath}/${year}_error_log-temp.csv`;
+
+
+	// if files for selected year exist
+	if (fs.existsSync(dataPath) && fs.existsSync(logPath) && fs.existsSync(errorPath)) {
+		// read files into variables
+		const dataArr = fs.readFileSync(dataPath, 'utf8').trim().split('\n');
+		const logArr = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+		const errorArr = fs.readFileSync(errorPath, 'utf8').trim().split('\n');
+
+		// for each item in error array
+		// iterator starts at 1, first line is header item
+		const newErrorArr = [];
+		for (let i=1; i < errorArr.length; i += 1) {
+			// check if the error is server error 500
+			const searchString = 'code 500';
+			const currentItem = errorArr[i].split(';');
+			const index = currentItem[1];
+			if (currentItem[2].indexOf(searchString) > -1) {
+				console.log(`@reviewDownloads:: ${year}/${index}`);
+				
+				// fetch data
+				try {
+					console.log(`${year}/${index}: Request data ...`);
+					const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
+					// test for success
+					console.log(`${year}/${index}: Verify data ...`);
+					if(resp.status === 200){
+						// parse data
+						const respArr = parseData(year, index, resp.data);
+						console.log(respArr);
+
+						// find index of previous element
+						let prevIndex = 0;
+						let prevAuth = 1;
+						for (let x = index - 1; x >= 1; x -= 1) {
+							const searchIndex = logArr.indexOf(`${year};${x}`);
+							if (searchIndex >= 0) {
+								prevIndex = searchIndex;
+								prevAuth = x;
+								console.log(`${year}/${index}: Previous index found = ${x}`);
+								break;
+							}
+						}
+	
+						// insert data into log array
+						logArr.splice(prevIndex + 1, 0, `${year};${index}`);
+
+						// insert data into data array
+						dataArr.splice(prevIndex + 1, 0, respArr.join(';'));
+
+						// delete error item from error array
+						// errorArr.splice(i, 1);
+
+						console.log(`${year}/${index}: Arrays updated`);
+					} else {
+						console.error(`${year}/${index}: Error code ${resp.status}`);
+						// new data is not available, keep the error in list
+						newErrorArr.push(errorArr[i]);
+					}
+				} catch(e) {
+						// add item to log
+						console.error(`Comumunication ERROR when getting data for ${year}/${index}\n${e}\n`)
+				}
+
+			// else push error to new Error Array
+			} else {
+				newErrorArr.push(errorArr[i]);
+			}
+		}
+
+		// save new arrays to files
+		// save new data array to file
+		fs.writeFile(tempDataPath, dataArr.join('\n'), (err) => {
+			// If an error occurred, show it and return
+			if(err) return console.error(err);
+			// Successfully wrote to the file!
+			// remove old file
+			fs.unlink(dataPath, (err) => {
+				if (err) throw err;
+				console.log(`${dataPath} file was deleted\n`);
+				// rename current file
+				fs.rename(tempDataPath, dataPath, (err) => {
+					if (err) {
+							console.log('Data File rename ERROR: ' + err);
+							throw err;
+					}
+					console.log('Data File renamed Succesffulyy!!\n');
+				});
+			});
+		});
+		// save new log array to file
+		fs.writeFile(tempLogPath, logArr.join('\n'), (err) => {
+			// If an error occurred, show it and return
+			if(err) return console.error(err);
+			// Successfully wrote to the file!
+			// remove old file
+			fs.unlink(logPath, (err) => {
+				if (err) throw err;
+				console.log(`${logPath} file was deleted\n`);
+				// rename current file
+				fs.rename(tempLogPath, logPath, (err) => {
+					if (err) {
+							console.log('Log File rename ERROR: ' + err);
+							throw err;
+					}
+					console.log('Log File renamed Succesffulyy!!\n');
+				});
+			});
+		});
+		// save new error array to file
+		fs.writeFile(tempErrorPath, newErrorArr.join('\n'), (err) => {
+			// If an error occurred, show it and return
+			if(err) return console.error(err);
+			// Successfully wrote to the file!
+			// remove old file
+			fs.unlink(errorPath, (err) => {
+				if (err) throw err;
+				console.log(`${errorPath} file was deleted\n`);
+				// rename current file
+				fs.rename(tempErrorPath, errorPath, (err) => {
+					if (err) {
+							console.log('Error File rename ERROR: ' + err);
+							throw err;
+					}
+					console.log('Error File renamed Succesffulyy!!\n');
+				});
+			});
+		});
+	
+	// else print error message
+	} else {
+		console.log(`ERROR: some or all files for year = ${year} are missing!`)
+	}
 }
 
 
 /////////////////////////////////////////////////////////////////////////////////////
 // MAIN
 function main() {
-	console.log(process.argv);
+	console.log(`\nArguments Array:\n[ ${process.argv.join(' , ')} ]\n`);
 
 	// default local data
 	const batch_size = 1;
 	// manually add number of authorisations for each year available
 	// the availability starts in 2013 with authorisation no 1025
-	const first_auth = {2013: 1025};
-	const last_auth = {2019: 588};
+	const first_auth = { key:2013, value:1025 };
+	const last_auth = { key:2019, value:588 };
 	const max_count = {
 		2013: 1682,
 		2014: 1494,
@@ -303,60 +456,66 @@ function main() {
 		2. -d : downloads all data from the website and save it in HTML files\n\
 				+ can also accept additional arguments\n\
 					2003 1025\n\
-		3. -p : parse all HTML files and save the results in a CSV file\n\
-				+ can also accept additional arguments\n\
-					2003 1025\n\
+		3. -r : parse all CSV files and check for download errors\n\
+						in case of server error 500 is found request data again and update files\n\
+				+ can also accept year argument\n\
+					[2003 - 2019]\n\
 		';
 	// set default argument
 	const argument = process.argv[2] || '-h';
 	
 	// run requested command
-    // 1. if argument is 'h' or 'help' print available commands
-    if (argument === '-h') {
-        console.log(helpText);
+	// 1. if argument is 'h' or 'help' print available commands
+	if (argument === '-h') {
+			console.log(helpText);
 
-    // 2. else if argument is 'd' >> download all data from server
-    } else if (argument === '-d') {
-		// get remaining arguments
-		const year = process.argv[3] || 0;
-		const index = process.argv[4] || 0;
-
-			// if there are no more arguments, download all files from server
-			if (year === 0 && index === 0) {
-				// extract counties from the localities level tables
-				console.log('downloadData branch\n')
-				downloadData(first_auth, last_auth, max_count, batch_size);
-			
-			// if both year and index !== 0, extract the corresponding file
-			} else if (year !== 0 && index === 0) {
-				console.log('downloadYear branch\n')
-				downloadYear(year, first_auth, last_auth, max_count);
-			
-			// if both year and index !== 0, extract the corresponding file
-			} else if (year !== 0 && index !== 0) {
-				console.log('downloadFile branch\n')
-				downloadFile(year, index);
-
-			// else print help
-			} else {
-				console.log(helpText);
-			}
-        
-	
-	// 3. else ift argument is 'p' >> parse all files
-	} else if (argument === '-p') {
+	// 2. else if argument is 'd' >> download all data from server
+	} else if (argument === '-d') {
 		// get remaining arguments
 		const year = process.argv[3] || 0;
 		const index = process.argv[4] || 0;
 
 		// if there are no more arguments, download all files from server
-		if (year === index === 0) {
+		if (year === 0 && index === 0) {
 			// extract counties from the localities level tables
-			parseData();
+			console.log('downloadData branch\n')
+			downloadData(first_auth, last_auth, max_count, batch_size);
+		
+		// if both year and index !== 0, extract the corresponding file
+		} else if (year !== 0 && index === 0) {
+			console.log('downloadYear branch\n')
+			downloadYear(year, first_auth, last_auth, max_count);
 		
 		// if both year and index !== 0, extract the corresponding file
 		} else if (year !== 0 && index !== 0) {
-			parseFile(year, index);
+			console.log('downloadFile branch\n')
+			downloadFile(year, index);
+
+		// else print help
+		} else {
+			console.log(helpText);
+		}
+			
+	
+	// 3. else ift argument is 'p' >> parse all CSV files and check for download errors
+	} else if (argument === '-r') {
+		// get remaining arguments
+		const year = process.argv[3] || 0;
+
+		// if there are no more arguments, download all files from server
+		if (year === 0) {
+			// extract counties from the localities level tables
+			console.log('This branch is not implemented yet, try to add year value\n');
+			// reviewDownloads();
+		
+		// if year !== 0 and in range, check files for errors
+		} else if (year !== 0 && year >= first_auth.key && year <= last_auth.key) {
+			console.log(`Year value = ${year} OK!\n`);
+			reviewDownloads(year);
+		
+		// if year !== 0 and in range, check files for errors
+		} else if (year !== 0 && ( year < first_auth.key || year > last_auth.key )) {
+			console.log(`ERROR: year ${year} out of range [${first_auth.key} - ${last_auth.key}]\n`);
 
 		// else print help
 		} else {
