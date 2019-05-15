@@ -2,31 +2,11 @@ const axios = require('axios'); //for web requests with promise
 const cheerio = require('cheerio'); // for content identification inside htmls
 let fs = require('fs'); //for saving to file
 const targetServer = 'https://primariaclujnapoca.ro/autorizari-constructii/autorizatii-de-construire';
-const htmlOutputPath = './scraped';
-const csvOutputPath = './processed';
-const readline = require('readline');
-const stream = require('stream');
-
-
-/////////////////////////////////////////////////////////////////////////////////////
-// parse text from html to csv
-function parseHtml(htmlText) {
-	// local variables
-	const outArray = [];
-	// load html text
-	const $ = cheerio.load(htmlText);
-	// return array
-	return outArray;
-}
-
-/////////////////////////////////////////////////////////////////////////////////////
-// parse html file
-function parseFile(year, index) {
-	const fileName = `year_index.html`;
-	const htmlText = fs.readFileSync(`${htmlOutputPath}/${fileName}`);
-	// parse text
-	const authArr = parseHtml(htmlText);
-}
+const csvOutputPath = './scraped';
+const procOutputPath = './processed';
+const geoOutputPath = './geolocated';
+// custom modules
+const processCSV = require('./processCSV.js');
 
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -105,7 +85,7 @@ function saveToFile(year, index, data, outStream) {
 
 	// write to file
 	// fs.writeFileSync(filename, dataArr.join(';'));
-	outStream.write(`${dataArr.join(';')}\n`);
+	outStream.write(`"${dataArr.join('";"')}"\n`);
 	console.log(`@saveToFile:: AC ${year}/${index} saved to file`);
 }
 
@@ -452,12 +432,15 @@ function main() {
 
 	// help text
     const helpText = '\n Available commands:\n\n\
-		1. -h : display help text\n\
-		2. -d : downloads all data from the website and save it in HTML files\n\
+		1. -h : HELP > display help text\n\
+		2. -d : DOWNLOAD > downloads all data from the website and save it in CSV files by year\n\
 				+ can also accept additional arguments\n\
 					2003 1025\n\
-		3. -r : parse all CSV files and check for download errors\n\
+		3. -r : REVIEW > parse all CSV files and check for download errors\n\
 						in case of server error 500 is found request data again and update files\n\
+				+ can also accept year argument\n\
+					[2003 - 2019]\n\
+		4. -p : PROCESS > extract relevant data from CSV files\n\
 				+ can also accept year argument\n\
 					[2003 - 2019]\n\
 		';
@@ -497,7 +480,7 @@ function main() {
 		}
 			
 	
-	// 3. else ift argument is 'p' >> parse all CSV files and check for download errors
+	// 3. else if argument is 'r' >> parse all CSV files and check for download errors
 	} else if (argument === '-r') {
 		// get remaining arguments
 		const year = process.argv[3] || 0;
@@ -505,15 +488,19 @@ function main() {
 		// if there are no more arguments, download all files from server
 		if (year === 0) {
 			// extract counties from the localities level tables
-			console.log('This branch is not implemented yet, try to add year value\n');
-			// reviewDownloads();
+			console.log('Review all years\n');
+			// for each year review downloads
+			for (let i = first_auth.key; i <= last_auth.key; i += 1) {
+				console.log(`Year value = ${year} OK!\n`);
+				reviewDownloads(year);
+			}
 		
 		// if year !== 0 and in range, check files for errors
 		} else if (year !== 0 && year >= first_auth.key && year <= last_auth.key) {
 			console.log(`Year value = ${year} OK!\n`);
 			reviewDownloads(year);
 		
-		// if year !== 0 and in range, check files for errors
+		// if year !== 0 and out of range, exit
 		} else if (year !== 0 && ( year < first_auth.key || year > last_auth.key )) {
 			console.log(`ERROR: year ${year} out of range [${first_auth.key} - ${last_auth.key}]\n`);
 
@@ -521,6 +508,35 @@ function main() {
 		} else {
 			console.log(helpText);
 		}
+
+	// 4. else if argument is 'p' >> parse all CSV files and retrieve relevant data
+	} else if (argument === '-p') {
+		// get remaining arguments
+		const year = process.argv[3] || 0;
+
+		// if there are no more arguments, process all years
+		if (year === 0) {
+			// extract counties from the localities level tables
+			console.log('Process all years\n');
+			// for each year review downloads
+			for (let i = first_auth.key; i <= last_auth.key; i += 1) {
+				console.log(`Year value = ${year} OK!\n`);
+				processCSV(year, procOutputPath, csvOutputPath);
+			}
+		
+		// if year !== 0 and in range, process csv files for given year
+		} else if (year !== 0 && year >= first_auth.key && year <= last_auth.key) {
+			console.log(`Year value = ${year} OK!\n`);
+			processCSV(year, procOutputPath, csvOutputPath);
+		
+		// if year !== 0 and out of range, exit
+		} else if (year !== 0 && ( year < first_auth.key || year > last_auth.key )) {
+			console.log(`ERROR: year ${year} out of range [${first_auth.key} - ${last_auth.key}]\n`);
+
+	// else print help
+	} else {
+		console.log(helpText);
+	}
 
 
     // else print help
