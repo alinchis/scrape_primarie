@@ -16,7 +16,7 @@ module.exports = function (year, outPath, inPath) {
 
     // declare processed items array
     const outArr = [];
-    outArr.push('year;index;address\n');
+    outArr.push('year;index;address');
 
     // read CSV file
     // if file for selected year exist
@@ -28,10 +28,21 @@ module.exports = function (year, outPath, inPath) {
         // for each item in array
         for (let i = 1; i < dataArr.length; i += 1) {
             // get current line array
-            const currentLine = dataArr[i].split(';');
-            console.log(currentLine);
+            const currentLine = dataArr[i].split('";"');
+            // console.log(currentLine);
+            // create variables to hold data
+            const index = currentLine[0].replace(/\"/g, ''); // numar autorizare
+            const dateShow = currentLine[2].replace(/\"/g, ''); // data afisarii
+            const dateCreated = currentLine[22].replace(/\"/g, ''); // data creare
+            const dateRequest = currentLine[11].replace(/\"/g, ''); // data cerere
+            const noRequest = currentLine[12].replace(/\"/g, ''); // numar cerere
+            const impCat = currentLine[5]; // categoria de importanta
+            const address = currentLine[4]; // adresa lucrare
+            const title = currentLine[3]; // denumire lucrare
+            const value = currentLine[8].replace(/\"/g, ''); // valoare lucrare
+            const tax = currentLine[23].replace(/\"/g, ''); // taxa autorizare
             // add data to processed array
-            outArr.push(`${year};${currentLine[0]};${currentLine[4]}`);
+            outArr.push(`${year};${index};${title}`);
         }
 
     } else {

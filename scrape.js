@@ -72,7 +72,6 @@ function parseData(year, index, data) {
 	console.log(`@parseData:: ${year}/${index} DONE\n`);
 	// console.log(newArray);
 	return newArray;
-
 }
 
 
@@ -95,68 +94,6 @@ function saveToFile(year, index, data, outStream) {
 async function downloadFile(year, index) {
 	const data = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
 	saveToFile(year, index, data);
-}
-
-/////////////////////////////////////////////////////////////////////////////////////
-// download data from server
-async function downloadData(first_auth, last_auth, max_count, batch_size) {
-	let urls_to_fetch = [];
-	// create log file
-	const logStream = fs.createWriteStream(`download_log.csv`);
-	logStream.write('year;number;error\n');
-	// create output file
-	const outStream = fs.createWriteStream(`lista_AC.csv`);
-	const outStreamHeader = [
-		'Aut. Nr.',
-		'An',
-		'Data',
-		'Titlu',
-		'Adresa',
-		'Categorie importanta',
-		'Carte funciara',
-		'Nr. TOPO',
-		'Detalii',
-		'Titular',
-		'Cerere Nr.',
-		'Cerere Data',
-		'Durata executie',
-		'UM',
-		'Valabilitate',
-		'UM',
-		'Primar',
-		'Secretar',
-		'Arhitect Sef',
-		'Sef Serviciu',
-		'Intocmit de',
-		'Data creare',
-		'Taxa autorizare',
-	];
-	outStream.write(`${outStreamHeader.join(';')}\n`);
-
-	// for each year value in range
-	for (let year = 2013; year <= 2019; year++){
-		console.log(`YEAR:: ${year}`);
-		// for each authorisation number, max limit set to max_count /year
-		// available list starts in 2013 with index no 1045
-		for (let index = year === 2013 ? 1045 : 1; index <= max_count[year]; index++){
-			// fetch data
-			try {
-				const resp = await axios.get(`${targetServer}/autorizatie-de-construire-${index}-din-${year}/`);
-				// test for success
-				if(resp.status === 200){
-					saveToFile(year, index, resp.data, outStream);
-					// console.log(`saved to ${filename}`);
-				} else {
-					logStream.write(`${year};${index};${resp.status}\n`);
-					console.error(`Error getting data for ${year}/${index}`);
-				};
-			} catch(e) {
-					// add item to log
-					logStream.write(`${year};${index};${e}\n`);
-					console.error(`Error ${e} when getting index for year ${year} and index ${index}`)
-			};
-		}
-	}
 }
 
 
@@ -208,6 +145,7 @@ async function downloadYear(year, first_auth, last_auth, max_count) {
 			'Categorie importanta',
 			'Carte funciara',
 			'Nr. TOPO',
+			'Valoare Lucrari',
 			'Detalii',
 			'Titular',
 			'Cerere Nr.',
@@ -227,7 +165,7 @@ async function downloadYear(year, first_auth, last_auth, max_count) {
 		outStream.write(`${outStreamHeader.join(';')}\n`);
 
 		// in case of year 2013, the first available authorisation starts at 1045
-		if (year === 2013) lastIndex = 1045;
+		if (year == first_auth.key) lastIndex = first_auth.value;
 	}
 	
 
@@ -414,12 +352,10 @@ async function reviewDownloads(year) {
 function main() {
 	console.log(`\nArguments Array:\n[ ${process.argv.join(' , ')} ]\n`);
 
-	// default local data
-	const batch_size = 1;
 	// manually add number of authorisations for each year available
 	// the availability starts in 2013 with authorisation no 1025
-	const first_auth = { key:2013, value:1025 };
-	const last_auth = { key:2019, value:588 };
+	const first_auth = { key:2013, value:1045 };
+	const last_auth = { key:2019, value:596 }; // updated at 15.05.2019
 	const max_count = {
 		2013: 1682,
 		2014: 1494,
@@ -427,7 +363,7 @@ function main() {
 		2016: 2286,
 		2017: 1864,
 		2018: 2001,
-		2019: 588
+		2019: 596
 	};
 
 	// help text
@@ -452,17 +388,21 @@ function main() {
 	if (argument === '-h') {
 			console.log(helpText);
 
-	// 2. else if argument is 'd' >> download all data from server
+	// 2. else if argument is 'd' >> download data from server
 	} else if (argument === '-d') {
 		// get remaining arguments
 		const year = process.argv[3] || 0;
 		const index = process.argv[4] || 0;
 
-		// if there are no more arguments, download all files from server
+		// if there are no more arguments, download all years
 		if (year === 0 && index === 0) {
 			// extract counties from the localities level tables
-			console.log('downloadData branch\n')
-			downloadData(first_auth, last_auth, max_count, batch_size);
+			console.log('download all years branch\n')
+			// for each year
+			for (let i = first_auth.key; i <= last_auth.key; i += 1) {
+				console.log(`Year value = ${year} OK!\n`);
+				downloadYear(i, first_auth, last_auth, max_count);
+			}
 		
 		// if both year and index !== 0, extract the corresponding file
 		} else if (year !== 0 && index === 0) {
@@ -491,8 +431,8 @@ function main() {
 			console.log('Review all years\n');
 			// for each year review downloads
 			for (let i = first_auth.key; i <= last_auth.key; i += 1) {
-				console.log(`Year value = ${year} OK!\n`);
-				reviewDownloads(year);
+				console.log(`Year value = ${i} OK!\n`);
+				reviewDownloads(i);
 			}
 		
 		// if year !== 0 and in range, check files for errors
@@ -520,8 +460,8 @@ function main() {
 			console.log('Process all years\n');
 			// for each year review downloads
 			for (let i = first_auth.key; i <= last_auth.key; i += 1) {
-				console.log(`Year value = ${year} OK!\n`);
-				processCSV(year, procOutputPath, csvOutputPath);
+				console.log(`Year value = ${i} OK!\n`);
+				processCSV(i, procOutputPath, csvOutputPath);
 			}
 		
 		// if year !== 0 and in range, process csv files for given year
